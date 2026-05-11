@@ -1,6 +1,12 @@
-# SistemaEvaluacion v2
+# TeleECOE
 
 Sistema web local para evaluación por estaciones, orientado a tablets y una PC maestra. Incluye administración de alumnos/estaciones/rúbricas, registro de evaluaciones, analítica básica y grabación de video para la estación RCP.
+
+Nombre anterior del proyecto: `SistemaEvaluacion v2`.
+
+Para entender todo el proyecto en lenguaje natural antes de pedir cambios, leer:
+
+`docs/TELEECOE_GUIA_COMPLETA.md`
 
 ## Estado actual
 

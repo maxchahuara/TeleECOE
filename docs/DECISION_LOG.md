@@ -18,6 +18,25 @@ Consecuencias:
 
 ---
 
+## 2026-05-11 - Renombrar el producto como TeleECOE
+
+Decisión:
+Desde este punto el sistema se referirá como **TeleECOE** en documentación y conversación de trabajo.
+
+Contexto:
+El proyecto venía con el nombre técnico/heredado `SistemaEvaluacion v2`, pero el usuario pidió renombrarlo a TeleECOE para continuar el desarrollo con una identidad más clara.
+
+Alternativas consideradas:
+- Mantener `SistemaEvaluacion v2` como nombre visible.
+- Usar TeleECOE como nombre del producto, conservando temporalmente rutas/carpetas heredadas.
+
+Consecuencias:
+- La documentación nueva usará TeleECOE.
+- Las rutas de carpeta pueden seguir llamándose `SistemaEvaluacion v2` por ahora para evitar cambios innecesarios o riesgosos.
+- Un renombrado visual/código completo puede pedirse luego como cambio específico.
+
+---
+
 ## 2026-05-11 - Separar chat administrativo de cambios de producto
 
 Decisión:

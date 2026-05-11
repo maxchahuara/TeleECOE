@@ -1,6 +1,8 @@
 # Cambios solicitados
 
-Este documento es el lugar principal para escribir pedidos concretos de cambio del producto en lenguaje natural.
+Este documento es el lugar principal para escribir pedidos concretos de cambio de **TeleECOE** en lenguaje natural.
+
+Antes de pedir cambios grandes, conviene leer `docs/TELEECOE_GUIA_COMPLETA.md`, que explica qué tiene, qué hace y cómo funciona el sistema.
 
 ## Cómo usarlo
 

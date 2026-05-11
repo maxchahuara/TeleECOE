@@ -1,6 +1,10 @@
 # Especificación viva del producto
 
-Este documento describe qué debe ser `SistemaEvaluacion v2` como producto. No es una lista de tareas diarias; es la referencia estable del sistema.
+Este documento describe qué debe ser **TeleECOE** como producto. No es una lista de tareas diarias; es la referencia estable del sistema.
+
+Nombre anterior del proyecto: `SistemaEvaluacion v2`.
+
+Para una explicación completa en lenguaje natural, leer primero `docs/TELEECOE_GUIA_COMPLETA.md`.
 
 ## Propósito
 
