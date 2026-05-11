@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 mt-4">
+    <h1>Gestión de Estaciones</h1>
+    <a href="{{ url_for('master.dashboard') }}" class="btn btn-secondary fs-5">Volver al Dashboard</a>
+</div>
+
+{% include "includes/alerts.html" ignore missing %}
+
+<div class="row">
+    <div class="col-md-4">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">{% if estacion_edit %}Editar Estación{% else %}Nueva Estación{% endif %}</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST"
+                    action="{% if estacion_edit %}{{ url_for('master.estaciones_editar', id=estacion_edit.id) }}{% else %}{{ url_for('master.estaciones_admin') }}{% endif %}">
+                    <div class="mb-3">
+                        <label class="form-label">ID Corto Único *</label>
+                        <input type="text" class="form-control" name="id"
+                            value="{{ estacion_edit.id if estacion_edit else '' }}" {% if estacion_edit %}readonly{%
+                            endif %} required placeholder="Ej: oftalmo">
+                        <small class="text-muted">No usar espacios, solo letras minúsculas (ej:
+                            <code>neurologia</code>)</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Nombre para Mostrar *</label>
+                        <input type="text" class="form-control" name="nombre"
+                            value="{{ estacion_edit.nombre if estacion_edit else '' }}" required
+                            placeholder="Estación 11: Neurología">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Orden (Numérico)</label>
+                        <input type="number" class="form-control" name="orden"
+                            value="{{ estacion_edit.orden if estacion_edit else '11' }}" required>
+                    </div>
+                    <div class="d-grid mt-4">
+                        <button type="submit" class="btn btn-{% if estacion_edit %}warning{% else %}primary{% endif %}">
+                            {% if estacion_edit %}Guardar Cambios{% else %}Agregar Estación{% endif %}
+                        </button>
+                        {% if estacion_edit %}
+                        <a href="{{ url_for('master.estaciones_admin') }}"
+                            class="btn btn-outline-secondary mt-2">Cancelar</a>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lista de Estaciones -->
+    <div class="col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-body table-responsive">
+                <table class="table table-striped table-hover align-middle">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>ID (URL)</th>
+                            <th>Nombre Completo</th>
+                            <th>Orden</th>
+                            <th class="text-center">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for e in estaciones %}
+                        <tr>
+                            <td><code>{{ e.id }}</code></td>
+                            <td class="fw-bold">{{ e.nombre }}</td>
+                            <td>{{ e.orden }}</td>
+                            <td class="text-center">
+                                <!-- Botón vital para adentrarse en la rúbrica (preguntas) de esta estación -->
+                                <a href="{{ url_for('master.estaciones_constructor', id=e.id) }}"
+                                    class="btn btn-sm btn-info text-white">Construir Rúbrica</a>
+
+                                <a href="{{ url_for('master.estaciones_editar', id=e.id) }}"
+                                    class="btn btn-sm btn-warning">Editar</a>
+
+                                <form method="POST" action="{{ url_for('master.estaciones_eliminar', id=e.id) }}"
+                                    class="d-inline"
+                                    onsubmit="return confirm('ATENCIÓN: Borrar esta estación ELIMINARÁ también sus rúbricas y las evaluaciones que los alumnos hayan rendido en ella. ¿Proceder de todos modos?');">
+                                    <button type="submit" class="btn btn-sm btn-danger">Eliminar</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4" class="text-center text-muted">No hay estaciones registradas.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

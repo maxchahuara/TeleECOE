@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 mt-4">
+    <h1>Gestión de Alumnos</h1>
+    <a href="{{ url_for('master.dashboard') }}" class="btn btn-secondary fs-5">Volver al Dashboard</a>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<div class="row">
+    <!-- Formulario para Agregar/Editar Alumno -->
+    <div class="col-md-4">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">{% if alumno_edit %}Editar Alumno{% else %}Nuevo Alumno{% endif %}</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{% if alumno_edit %}{{ url_for('master.alumnos_editar', id=alumno_edit.id) }}{% else %}{{ url_for('master.alumnos_admin') }}{% endif %}">
+                    <div class="mb-3">
+                        <label class="form-label">DNI / Código (ID Opcional)</label>
+                        <input type="number" class="form-control" name="id" value="{{ alumno_edit.id if alumno_edit else '' }}" {% if alumno_edit %}readonly{% endif %}>
+                        <small class="text-muted">Dejar en blanco para asignar automático</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Nombre Completo *</label>
+                        <input type="text" class="form-control" name="nombre" value="{{ alumno_edit.nombre if alumno_edit else '' }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">CMP (Opcional)</label>
+                        <input type="text" class="form-control" name="cmp" value="{{ alumno_edit.cmp if alumno_edit else '' }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Grupo</label>
+                        <input type="number" class="form-control" name="grupo" value="{{ alumno_edit.grupo if alumno_edit else '1' }}" required>
+                    </div>
+                    <div class="d-grid mt-4">
+                        <button type="submit" class="btn btn-{% if alumno_edit %}warning{% else %}primary{% endif %}">
+                            {% if alumno_edit %}Guardar Cambios{% else %}Agregar Alumno{% endif %}
+                        </button>
+                        {% if alumno_edit %}
+                        <a href="{{ url_for('master.alumnos_admin') }}" class="btn btn-outline-secondary mt-2">Cancelar Edición</a>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lista Actual de Alumnos -->
+    <div class="col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-body table-responsive">
+                <table class="table table-striped table-hover align-middle">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>ID</th>
+                            <th>Nombre Completo</th>
+                            <th>CMP</th>
+                            <th>Grupo</th>
+                            <th class="text-center">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for a in alumnos %}
+                        <tr>
+                            <td>{{ a.id }}</td>
+                            <td>{{ a.nombre }}</td>
+                            <td>{{ a.cmp or '-' }}</td>
+                            <td>G-{{ a.grupo }}</td>
+                            <td class="text-center">
+                                <a href="{{ url_for('master.alumnos_editar', id=a.id) }}" class="btn btn-sm btn-warning">Editar</a>
+                                <form method="POST" action="{{ url_for('master.alumnos_eliminar', id=a.id) }}" class="d-inline" onsubmit="return confirm('¿Estás seguro de eliminar este alumno?\n¡Se borrarán también todas sus evaluaciones asociadas!');">
+                                    <button type="submit" class="btn btn-sm btn-danger">Eliminar</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="text-center text-muted">No hay alumnos registrados.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

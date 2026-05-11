@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 mt-4">
+    <div>
+        <h1 class="mb-0">Constructor de Rúbrica Avanzada</h1>
+        <p class="text-muted fs-5">Estación: <strong>{{ estacion.nombre }}</strong></p>
+    </div>
+    <div>
+        <button class="btn btn-primary fs-5 fw-bold shadow-sm" data-bs-toggle="modal"
+            data-bs-target="#modalAddCategoria">
+            + Añadir Nueva Categoría
+        </button>
+        <a href="{{ url_for('master.estaciones_admin') }}" class="btn btn-secondary fs-5 ms-2 shadow-sm">Volver</a>
+    </div>
+</div>
+
+<div class="alert alert-info shadow-sm fs-5">
+    <i class="bi bi-info-circle-fill"></i> <strong>Modo Constructor (Estilo Moodle):</strong> Aquí diseñas la estructura
+    de evaluación.
+    Añade categorías principales (ej: "Anamnesis", "Examen Físico") y luego define cada pregunta/comportamiento exacto
+    que el evaluador validará.
+</div>
+
+<!-- Estructura de la Rúbrica -->
+<div class="row">
+    <div class="col-12">
+        {% if estacion.categorias %}
+        {% for categoria in estacion.categorias|sort(attribute='orden') %}
+        <div class="card mb-4 shadow border-dark">
+            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">{{ categoria.orden }}. {{ categoria.nombre }}
+                    <span class="badge bg-secondary ms-2 fs-6 fw-normal">Tipo: {{ "Selector Único Diagnóstico" if
+                        categoria.tipo == 'seleccion_unica' else "Preguntas Estándar" }}</span>
+                </h4>
+                <div>
+                    <form method="POST" action="{{ url_for('master.categorias_eliminar', id=categoria.id) }}"
+                        class="d-inline"
+                        onsubmit="return confirm('¿Seguro que deseas eliminar esta categoría? Se borrarán todas las preguntas dentro de ella.');">
+                        <button type="submit" class="btn btn-sm btn-outline-danger text-white border-white">Eliminar
+                            Categoría</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card-body bg-light">
+                {% if categoria.criterios %}
+                <div class="list-group shadow-sm mb-3">
+                    {% for criterio in categoria.criterios %}
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div class="w-75">
+                            <div class="d-flex align-items-center mb-1">
+                                <span class="badge bg-primary rounded-pill fs-6 me-2">{{ criterio.puntos }} pts</span>
+                                <strong class="fs-5">{{ criterio.texto }}</strong>
+                            </div>
+                            <div class="text-muted">
+                                <code>Clave ID: {{ criterio.id }}</code> |
+                                <strong>Método de punteo: </strong>
+                                {% if criterio.tipo == 'rango' %}
+                                <span class="text-info fw-bold">Selector Rango: {{ criterio.opciones }}</span>
+                                {% else %}
+                                <span class="text-success fw-bold">Casilla (Check) Sí/No</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div>
+                            <form method="POST" action="{{ url_for('master.criterios_eliminar', id=criterio.id) }}"
+                                class="d-inline" onsubmit="return confirm('¿Eliminar pregunta de la rúbrica?');">
+                                <button type="submit" class="btn btn-sm btn-danger border-danger">Eliminar</button>
+                            </form>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="alert alert-secondary text-center mb-3">No has creado ningún ítem a evaluar bajo esta
+                    categoría.</div>
+                {% endif %}
+
+                <button class="btn btn-success fw-bold w-100 shadow-sm py-2" data-bs-toggle="modal"
+                    data-bs-target="#modalAddCriterio_{{ categoria.id }}">
+                    ✚ Añadir Concepto Evaluativo (Pregunta) a "{{ categoria.nombre }}"
+                </button>
+            </div>
+        </div>
+
+        <!-- MODAL AGREGAR CRITERIO (PREGUNTA) -->
+        <div class="modal fade" id="modalAddCriterio_{{ categoria.id }}" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <form method="POST" action="{{ url_for('master.criterios_nuevo', id_categoria=categoria.id) }}">
+                        <div class="modal-header bg-success text-white">
+                            <h5 class="modal-title">✚ Añadir Concepto de Evaluación en: {{ categoria.nombre }}</h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Texto descriptivo para el Evaluador *</label>
+                                <textarea class="form-control text-dark fs-5" name="texto" rows="2"
+                                    placeholder="Ej: Lava sus manos correctamente antes del procedimiento"
+                                    required></textarea>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Identificador Corto Único *</label>
+                                    <input type="text" class="form-control" name="id"
+                                        placeholder="Ej: {{ estacion.id }}_lavado" required>
+                                    <small class="text-muted">Minúsculas, sin espacios.</small>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Puntaje Máximo *</label>
+                                    <input type="number" step="0.1" class="form-control" name="puntos" value="1.0"
+                                        required>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Tipo de Respuesta Esperada del Evaluador</label>
+                                <select class="form-select" name="tipo"
+                                    onchange="toggleOpciones(this, '{{ categoria.id }}')">
+                                    <option value="checkbox">Casilla Ckeckbox (Hace / No hace)</option>
+                                    <option value="rango">Selector de Rango Progresivo (Pésimo / Regular / Excelente)
+                                    </option>
+                                </select>
+                            </div>
+                            <div class="mb-3 d-none" id="div_opciones_{{ categoria.id }}">
+                                <label class="form-label">Opciones de Puntaje (separadas por coma) *</label>
+                                <input type="text" class="form-control" name="opciones" placeholder="0, 0.5, 1"
+                                    value="0, 1, 2">
+                                <small class="text-muted">Define los valores exactos que el evaluador elegirá en los
+                                    botones.</small>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-success fw-bold">Guardar Concepto</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="alert alert-warning text-center p-5 shadow-sm bg-white border-warning">
+            <h3>Esta estación no tiene rúbrica configurada.</h3>
+            <p class="fs-5 text-muted">Las evaluaciones complejas se agrupan en categorías ("Anamnesis", "Examen",
+                "Diagnóstico"). Crea la primera para empezar a definir lo que el jurado evaluará.</p>
+            <button class="btn btn-primary btn-lg mt-3 shadow" data-bs-toggle="modal"
+                data-bs-target="#modalAddCategoria">Crear Primera Categoría Principal</button>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- MODAL AGREGAR CATEGORÍA -->
+<div class="modal fade" id="modalAddCategoria" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('master.categorias_nueva', id_estacion=estacion.id) }}">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title">+ Nueva Categoría de Rúbrica</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Nombre de Categoría *</label>
+                        <input type="text" class="form-control" name="nombre"
+                            placeholder="Ej: Anamnesis / Examen Físico" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Orden Numérico</label>
+                        <input type="number" class="form-control" name="orden" value="1" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Tipo de Lógica</label>
+                        <select class="form-select" name="tipo">
+                            <option value="normal">Normal (Batería de Preguntas Checkbox/Rango)</option>
+                            <option value="seleccion_unica">Selección Única (Diagnóstico Cerrado)</option>
+                        </select>
+                        <small class="text-muted">Solo usa Selección Única si el evaluador debe elegir obligatoriamente
+                            1 sola opción excluyente.</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Guardar Categoría</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    // JS para ocultar/mostrar el input de JSON range options al crear pregunta rúbrica
+    function toggleOpciones(selectElement, catId) {
+        const divOpciones = document.getElementById('div_opciones_' + catId);
+        if (selectElement.value === 'rango') {
+            divOpciones.classList.remove('d-none');
+        } else {
+            divOpciones.classList.add('d-none');
+        }
+    }
+</script>
+{% endblock %}

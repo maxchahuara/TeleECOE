@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% block content %}
+{% if estacion.id == 'rcp' %}
+<style>
+    /* Full screen layout for Station 5 */
+    body { height: 100vh; overflow: hidden; margin: 0; background-color: #000; }
+    .container.mt-4 { margin-top: 0 !important; max-width: 100%; padding: 0; height: 100vh; display: flex; flex-direction: column; }
+    .rcp-header { flex: 0 0 auto; padding: 10px 20px; background-color: #f8f9fa; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #ccc; z-index: 10; }
+    .rcp-cams { flex: 0 0 45vh; display: flex; flex-direction: row; background: #000; }
+    
+    .cam-wrapper { position: relative; flex: 1; height: 100%; border-right: none; }
+    .cam-wrapper iframe { width: 100%; height: 100%; border: none; }
+    
+    /* Overlay actions */
+    .cam-actions { position: absolute; top: 10px; right: 10px; z-index: 20; opacity: 0.7; transition: opacity 0.3s; }
+    .cam-wrapper:hover .cam-actions { opacity: 1; }
+    
+    /* Fullscreen logic */
+    .cam-wrapper.is-fullscreen {
+        position: fixed;
+        top: 0; left: 0; width: 100vw; height: 100vh;
+        z-index: 9999;
+        background: black;
+        border: none;
+    }
+    .cam-wrapper.is-fullscreen .btn-expand { display: none; }
+    .btn-reduce { display: none; }
+    .cam-wrapper.is-fullscreen .btn-reduce { display: inline-block; }
+
+    .rcp-questions { flex: 1 1 auto; overflow-y: auto; padding: 20px; background-color: #f8f9fa; }
+</style>
+<div class="rcp-header shadow-sm">
+    <h4 class="m-0 text-dark">Alumno: <strong>{{ alumno.nombre }}</strong> 
+    <span class="badge bg-danger ms-2" id="recordingBadge" style="display:none;"><i class="bi bi-record-circle-fill"></i> GRABANDO...</span>
+    <span class="badge bg-warning text-dark ms-2" id="recordingErrorBadge" style="display:none;"><i class="bi bi-exclamation-triangle-fill"></i> ERROR DE GRABACIÓN</span>
+    <span class="badge bg-secondary ms-2" id="normalBadge"><i class="bi bi-camera-video"></i> {{ estacion.nombre }} (Monitoreo 1 cámara)</span>
+    </h4>
+    <a href="{{ url_for('tablet.seleccionar_alumno', estacion_id=estacion.id) }}" class="btn btn-secondary shadow-sm">Cancelar</a>
+</div>
+<div class="rcp-cams shadow-lg">
+    <div class="cam-wrapper" id="camWrap1">
+        <div class="cam-actions">
+            <button type="button" class="btn btn-dark btn-sm btn-expand shadow" onclick="toggleFullscreen('camWrap1')"><i class="bi bi-arrows-fullscreen"></i> Expandir</button>
+            <button type="button" class="btn btn-danger btn-sm btn-reduce shadow" onclick="toggleFullscreen('camWrap1')"><i class="bi bi-fullscreen-exit"></i> Reducir</button>
+        </div>
+        {% if video_c1 %}
+        <video src="{{ url_for('static', filename=video_c1) }}" controls style="width:100%; height:100%; background:black;" preload="auto"></video>
+        {% else %}
+        <iframe src="{{ url_for('tablet.camera_auto_reload') }}" allow="fullscreen; autoplay; camera; microphone"></iframe>
+        {% endif %}
+    </div>
+</div>
+
+{% if not video_c1 %}
+<div id="startScreen" class="d-flex flex-column align-items-center justify-content-center" style="flex: 1 1 auto; background: #fff; padding: 20px;">
+    <h2 class="mb-4">Listo para evaluar a {{ alumno.nombre }}</h2>
+    <p class="text-muted mb-4 fs-5 text-center">Al iniciar la evaluación se comenzará a grabar automáticamente el video nítido de la cámara de la estación en el servidor de la computadora base.</p>
+    <button type="button" id="startEvaluationBtn" class="btn btn-success btn-lg fs-1 py-4 px-5 shadow-lg" onclick="startEvaluation()">
+        <i class="bi bi-play-circle-fill"></i> INICIAR EVALUACIÓN Y GRABAR
+    </button>
+    <div id="recordingStatus" class="alert alert-info mt-4 fs-5" style="display:none; max-width: 900px;"></div>
+</div>
+{% endif %}
+
+<div class="rcp-questions" id="questionsContainer" {% if not video_c1 %}style="display:none;"{% endif %}>
+{% else %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3>Alumno: <strong>{{ alumno.nombre }}</strong> <span class="badge bg-secondary ms-2">Estación: {{ estacion.nombre }}</span></h3>
+    <a href="{{ url_for('tablet.seleccionar_alumno', estacion_id=estacion.id) }}" class="btn btn-secondary">Cancelar</a>
+</div>
+{% endif %}
+
+{% if valores_previos %}
+<div class="alert alert-info shadow-sm">
+    <i class="bi bi-info-circle-fill"></i> <strong>Modo Edición:</strong> Este alumno ya cuenta con una evaluación
+    guardada. Si modifcas algo y presionas guardar, se sobrescribirá.
+</div>
+{% endif %}
+
+<form method="POST">
+    {% for categoria in estacion.categorias %}
+    <div class="card mb-4 shadow-sm border-dark">
+        <div class="card-header bg-dark text-white fs-4">
+            {{ categoria.nombre }}
+        </div>
+        <div class="card-body bg-light">
+
+            {# --- LOGICA PARA DIAGNÓSTICO (Selección Única de Textos) --- #}
+            {% if categoria.tipo == 'seleccion_unica' %}
+            <div class="btn-group-vertical w-100 shadow-sm" role="group">
+                {% for item in categoria.criterios %}
+                <input type="radio" class="btn-check" name="cat_{{ categoria.id }}" id="crit_{{ item.id }}"
+                    value="{{ item.id }}" {% if valores_previos.get(item.id) %}checked{% endif %} autocomplete="off">
+                <label
+                    class="btn btn-outline-primary btn-lg text-start btn-eval d-flex justify-content-between align-items-center"
+                    for="crit_{{ item.id }}">
+                    <span>{{ item.texto }}</span>
+                    <span class="badge bg-secondary">{{ item.puntos }} pts</span>
+                </label>
+                {% endfor %}
+            </div>
+
+            {% else %}
+            {# --- ITEMS NORMALES --- #}
+            {% for item in categoria.criterios %}
+
+            {# CASO ESPECIAL: Rango Numérico (JSON array [0, 1, 2]) #}
+            {% if item.tipo == 'rango' %}
+            <div class="mb-3 p-3 border rounded bg-white shadow-sm">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="fs-5 fw-bold">{{ item.texto }}</span>
+                </div>
+                <div class="btn-group w-100" role="group">
+                    {% set opciones_lista = parse_opciones(item.opciones) %}
+                    {% for opcion in opciones_lista %}
+                    <input type="radio" class="btn-check" name="crit_{{ item.id }}" id="crit_{{ item.id }}_{{ opcion }}"
+                        value="{{ opcion }}" {% if valores_previos.get(item.id)==opcion|string %}checked{% endif %}
+                        autocomplete="off" required>
+                    <label class="btn btn-outline-primary fs-4 py-3 btn-eval pt-3 pb-3 text-center"
+                        for="crit_{{ item.id }}_{{ opcion }}">{{ opcion }}
+                        Pts</label>
+                    {% endfor %}
+                </div>
+            </div>
+
+            {# CASO NORMAL: Checkbox #}
+            {% else %}
+            <div class="mb-2 d-grid">
+                <input type="checkbox" class="btn-check" id="crit_{{ item.id }}" name="crit_{{ item.id }}" {% if
+                    valores_previos.get(item.id) %}checked{% endif %} autocomplete="off">
+                <label
+                    class="btn btn-outline-primary btn-eval d-flex justify-content-between align-items-center shadow-sm"
+                    for="crit_{{ item.id }}">
+                    <span class="fs-5 fw-semibold ms-2">{{ item.texto }}</span>
+                    <span class="badge bg-light text-dark border p-2 fs-6">{{ item.puntos }} pts</span>
+                </label>
+            </div>
+            {% endif %}
+
+            {% endfor %}
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+
+    <div class="d-grid gap-2 mb-5">
+        <button type="submit" class="btn btn-primary btn-lg py-4 fs-2 shadow-lg">FINALIZAR Y GUARDAR EVALUACIÓN</button>
+    </div>
+</form>
+
+{% if estacion.id == 'rcp' %}
+</div> <!-- end rcp-questions -->
+
+<script>
+// Logica para Expandir/Reducir la cámara tapando toda la pantalla
+function toggleFullscreen(wrapperId) {
+    var wrapper = document.getElementById(wrapperId);
+    if(wrapper.classList.contains('is-fullscreen')) {
+        wrapper.classList.remove('is-fullscreen');
+    } else {
+        wrapper.classList.add('is-fullscreen');
+    }
+}
+
+async function startEvaluation() {
+    const startBtn = document.getElementById('startEvaluationBtn');
+    const statusBox = document.getElementById('recordingStatus');
+
+    startBtn.disabled = true;
+    startBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Iniciando grabación...';
+    statusBox.style.display = 'block';
+    statusBox.className = 'alert alert-info mt-4 fs-5';
+    statusBox.textContent = 'Conectando con go2rtc/cámara y preparando grabación...';
+
+    // 1. Informar al backend que dispare FFmpeg antes de mostrar el formulario.
+    let data;
+    try {
+        const response = await fetch("{{ url_for('tablet.start_record', estacion_id=estacion.id, alumno_id=alumno.id) }}", { method: 'POST' });
+        data = await response.json();
+        if (!response.ok || (data.status !== 'recording_started' && data.status !== 'already_recording')) {
+            throw new Error(data.error || data.status || 'No se pudo iniciar la grabación');
+        }
+    } catch (err) {
+        document.getElementById('normalBadge').style.display = 'none';
+        document.getElementById('recordingErrorBadge').style.display = 'inline-block';
+        statusBox.className = 'alert alert-danger mt-4 fs-5';
+        statusBox.textContent = 'No se pudo iniciar la grabación. Revisa go2rtc/cámara antes de evaluar. Detalle: ' + err.message;
+        startBtn.disabled = false;
+        startBtn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> REINTENTAR GRABACIÓN';
+        return;
+    }
+
+    // 2. Ocultar pantalla de inicio y mostrar formulario verdadero (remover d-flex que tiene !important en Bootstrap)
+    var startScrn = document.getElementById('startScreen');
+    startScrn.classList.remove('d-flex');
+    startScrn.classList.add('d-none');
+    
+    document.getElementById('questionsContainer').style.display = 'block';
+    
+    // 3. Cambiar badge superior
+    document.getElementById('normalBadge').style.display = 'none';
+    document.getElementById('recordingBadge').style.display = 'inline-block';
+
+    console.log("Grabación iniciada correctamente.", data);
+}
+</script>
+{% endif %}
+
+{% endblock %}

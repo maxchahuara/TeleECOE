@@ -1,0 +1,16 @@
+# Normalizar finales de línea en archivos de texto
+* text=auto
+
+# Scripts Windows mantienen CRLF si se editan en Windows
+*.bat text eol=crlf
+
+# Binarios
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.mp4 binary
+*.db binary
+*.sqlite binary
+*.exe binary

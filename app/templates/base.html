@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema Evaluación</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+
+        .btn-eval {
+            width: 100%;
+            margin-bottom: 10px;
+            padding: 15px;
+            font-size: 1.2rem;
+            text-align: left;
+            cursor: pointer !important;
+            position: relative;
+            z-index: 10;
+        }
+
+        .btn-eval * {
+            pointer-events: none !important;
+        }
+
+        .card-header {
+            font-weight: bold;
+            background-color: #0d6efd;
+            color: white;
+        }
+
+        .points-badge {
+            float: right;
+            background: white;
+            color: black;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container mt-4">
+        <!-- Global Alerts -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </div>
+
+    <!-- Bootstrap JS para componentes interactivos (Modales, Tooltips, etc) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+
+</html>

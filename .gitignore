@@ -1,0 +1,70 @@
+# SistemaEvaluacion v2 - archivos que NO deben versionarse
+
+# Entornos Python
+.venv/
+.venv-*/
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Variables locales y secretos
+.env
+.env.*
+!.env.example
+*.secret
+*.secrets
+
+# Configuración real de cámaras/go2rtc: contiene credenciales o URLs sensibles
+go2rtc.yaml
+go2rtc.yaml*
+go2rtc*.local.yaml
+!go2rtc.example.yaml
+
+# Scripts auxiliares locales que pueden contener credenciales/IPs privadas
+auto_update_camaras.py
+
+# Bases de datos reales / datos operativos
+*.db
+*.sqlite
+*.sqlite3
+*.db-*
+
+# Grabaciones, evidencias locales y logs
+app/static/grabaciones/
+logs/
+*.log
+*.mp4
+*.avi
+*.mov
+*.mkv
+
+# Backups locales/sensibles
+backups/
+*.bak
+*.backup
+*.tmp
+*.part
+
+# Binarios y herramientas pesadas descargables
+*.exe
+tools/
+downloads/
+
+# Archivos del sistema/editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Reportes locales de diagnóstico
+artifacts/

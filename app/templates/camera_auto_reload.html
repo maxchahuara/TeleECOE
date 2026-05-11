@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cámara RCP</title>
+    <style>
+        html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
+        iframe { width: 100%; height: 100%; border: 0; background: #000; }
+        .status {
+            position: fixed;
+            left: 10px;
+            bottom: 8px;
+            z-index: 5;
+            color: rgba(255,255,255,.75);
+            background: rgba(0,0,0,.45);
+            font: 12px/1.3 system-ui, sans-serif;
+            padding: 4px 8px;
+            border-radius: 8px;
+            pointer-events: none;
+        }
+        .reload-btn {
+            position: fixed;
+            right: 10px;
+            bottom: 8px;
+            z-index: 6;
+            color: rgba(255,255,255,.9);
+            background: rgba(0,0,0,.55);
+            border: 1px solid rgba(255,255,255,.35);
+            border-radius: 8px;
+            padding: 5px 10px;
+            font: 12px/1.3 system-ui, sans-serif;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <iframe id="cam" allow="fullscreen; autoplay; camera; microphone"></iframe>
+    <div class="status" id="status">Cámara RCP · MSE</div>
+    <button class="reload-btn" type="button" onclick="reloadCamera('manual')">Reconectar cámara</button>
+
+    <script>
+        const host = window.location.hostname;
+        const baseUrl = `http://${host}:1984/stream.html?src=camara1&mode=mse`;
+        const iframe = document.getElementById('cam');
+        const statusEl = document.getElementById('status');
+        let reloads = 0;
+        let lastReload = 0;
+
+        function setStatus(text) {
+            statusEl.textContent = text;
+        }
+
+        function reloadCamera(reason) {
+            const now = Date.now();
+            if (now - lastReload < 2500) return;
+            lastReload = now;
+            reloads += 1;
+            const url = `${baseUrl}&_=${now}`;
+            iframe.src = url;
+            setStatus(`Cámara RCP · MSE · reconexión ${reloads} (${reason})`);
+        }
+
+        iframe.addEventListener('load', () => {
+            setStatus(`Cámara RCP · MSE · activa${reloads ? ' · reconexiones ' + reloads : ''}`);
+        });
+
+        // Primera carga.
+        reloadCamera('inicio');
+
+        // No hacemos recargas preventivas: con la configuración actual Tuya/go2rtc
+        // se ve nítido y fluido, y una recarga programada cortaría una señal sana.
+        // Si algún día el visor queda congelado, el operador puede usar el botón
+        // "Reconectar cámara" sin afectar la grabación FFmpeg del servidor.
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) reloadCamera('retorno a pantalla');
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+# Ejemplo seguro para go2rtc.
+# Copiar como go2rtc.yaml y reemplazar las fuentes por valores reales locales.
+# No subir go2rtc.yaml real: puede contener credenciales, device_id o URLs Tuya sensibles.
+
+streams:
+  camara1:
+    # Opción RTSP local/genérica:
+    # - rtsp://usuario:password@192.168.1.100:554/stream1
+
+    # Opción Tuya/go2rtc cloud; completar fuera del repositorio:
+    # - tuya://ACCESS_ID:ACCESS_SECRET@REGION/DEVICE_ID?channel=0&subtype=0
+
+    # Fallback de prueba local si se genera test_video.mp4:
+    - ffmpeg:test_video.mp4#video=h264
+
+api:
+  listen: ":1984"
+
+rtsp:
+  listen: ":8554"

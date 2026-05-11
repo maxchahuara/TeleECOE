@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="text-center mt-4 mb-5">
+    <h1 class="display-4 fw-bold text-primary">&#x1F4F1; Modo Evaluador</h1>
+    <p class="lead text-secondary fs-4">Seleccione la estación que va a evaluar:</p>
+</div>
+
+<div class="row mt-4 justify-content-center">
+    {% set emojis = ['&#x1F3E5;', '&#x1FA7A;', '&#x1F4CB;', '&#x1F4C4;', '&#x1F52C;'] %}
+    {% set gradients = [
+    'linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)',
+    'linear-gradient(135deg, #2c3e50 0%, #3498db 100%)',
+    'linear-gradient(135deg, #0f2027 0%, #203a43 100%)',
+    'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)',
+    'linear-gradient(135deg, #232526 0%, #414345 100%)'
+    ] %}
+    {% set borders = ['#1e3c72', '#2c3e50', '#0f2027', '#11998e', '#232526'] %}
+
+    {% for e in estaciones %}
+    {% set idx = loop.index0 %}
+    {% set emoji = emojis[idx % emojis|length] %}
+    {% set bg_gradient = gradients[idx % gradients|length] %}
+    {% set border_color = borders[idx % borders|length] %}
+    <div class="col-md-6 col-lg-5 mb-4">
+        <a href="{{ url_for('tablet.seleccionar_alumno', estacion_id=e.id) }}" class="text-decoration-none">
+            <div class="card h-100 shadow-sm border-0 rounded-4"
+                style="background: {{ bg_gradient }}; border: 2px solid {{ border_color }} !important; transition: transform 0.2s, box-shadow 0.2s;">
+                <div class="card-body p-4 d-flex align-items-center">
+                    <div class="display-3 me-4" style="filter: drop-shadow(2px 4px 6px rgba(0,0,0,0.1));">
+                        {{ emoji|safe }}
+                    </div>
+                    <div>
+                        <h3 class="card-title fw-bold text-white mb-1">
+                            <span class="badge bg-light text-dark rounded-pill fs-6 align-middle me-2">Estación {{
+                                e.orden
+                                }}</span>
+                        </h3>
+                        <p class="card-text text-white fs-4 mb-0 fw-semibold mt-2">{{ e.nombre }}</p>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="alert alert-info shadow-sm border-info">
+    <div class="d-flex align-items-center">
+        <div class="fs-1 me-3">📡</div>
+        <div>
+            <h4 class="alert-heading mb-1">Conexión para Tablets</h4>
+            <p class="mb-0 fs-5">http://{{ ip }}:5000/tablet</p>
+        </div>
+    </div>
+</div>
+
+<div class="d-flex justify-content-between align-items-center mb-4 mt-4">
+    <h1>Panel de Control General</h1>
+    <div>
+        <!-- Botón de Administración de Alumnos -->
+        <a href="{{ url_for('master.alumnos_admin') }}" class="btn btn-primary fs-5 me-2">👥 Alumnos</a>
+
+        <!-- Botón de Administración de Estaciones -->
+        <a href="{{ url_for('master.estaciones_admin') }}" class="btn btn-dark fs-5 me-2">🏥 Estaciones</a>
+
+        <!-- Botón Nuevo de Exportación -->
+        <a href="{{ url_for('master.exportar_csv') }}" class="btn btn-success fs-5 me-2">📊 Descargar Excel/CSV</a>
+
+        <!-- Botón para Ver Dashboard Analítico -->
+        <a href="{{ url_for('analytics.dashboard_view') }}" class="btn btn-info fs-5 me-2 text-white">📈 Ver Dashboard
+            Analítico</a>
+
+        <button onclick="location.reload()" class="btn btn-warning fs-5">🔄 Actualizar Tabla</button>
+    </div>
+</div>
+
+<div class="card shadow">
+    <div class="card-body table-responsive">
+        <table class="table table-striped table-hover fs-6 align-middle table-bordered">
+            <thead class="table-dark text-center">
+                <tr>
+                    <th rowspan="2" class="align-middle">ID</th>
+                    <th rowspan="2" class="align-middle text-start">Alumno</th>
+                    <th rowspan="2" class="align-middle">Grupo</th>
+
+                    {% set colores = ['bg-primary', 'bg-danger', 'bg-success', 'bg-warning text-dark', 'bg-info
+                    text-dark', 'bg-dark', 'bg-secondary'] %}
+
+                    {% for est in estaciones %}
+                    <!-- Rotar colores de bootstrap basados en el orden -->
+                    {% set color_class = colores[loop.index0 % colores|length] %}
+                    <th colspan="2" class="{{ color_class }} border-white">E{{ est.orden }}: {{ est.nombre[:6] }}...
+                    </th>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    {% for est in estaciones %}
+                    {% set color_class = colores[loop.index0 % colores|length] %}
+                    <th class="{{ color_class }} border-white">E</th>
+                    <th class="{{ color_class }} border-white">P</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for res in resultados %}
+                <tr>
+                    <td class="text-center fw-bold">{{ res.id }}</td>
+                    <td class="text-truncate" style="max-width: 150px;">{{ res.nombre }}</td>
+                    <td class="text-center">{{ res.grupo }}</td>
+
+                    {% for est in estaciones %}
+                    {% set evaluacion = res.notas_estaciones[est.id] %}
+
+                    <td
+                        class="text-center fw-bold {% if evaluacion.estado %}text-success{% else %}text-muted{% endif %}">
+                        {% if evaluacion.estado %}✔{% else %}-{% endif %}
+                    </td>
+                    <td class="text-center fw-bold">
+                        {% if evaluacion.estado %}{{ "%.1f"|format(evaluacion.puntaje) }}{% else %}0.0{% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="{{ 3 + (estaciones|length)*2 }}" class="text-center text-muted p-4">No hay alumnos
+                        registrados para mostrar resultados.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

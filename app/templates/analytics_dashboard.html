@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid mt-4 mb-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="display-5 fw-bold text-primary"><i class="bi bi-bar-chart-fill me-2"></i>Dashboard Analítico</h1>
+        <div>
+            <a href="{{ url_for('master.dashboard') }}" class="btn btn-outline-secondary me-2">Volver al Panel</a>
+            <button class="btn btn-outline-success" onclick="exportData()">
+                <i class="bi bi-file-earmark-spreadsheet"></i> Exportar CSV
+            </button>
+        </div>
+    </div>
+
+    <!-- KPIs Superiores -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 border-start border-primary border-4">
+                <div class="card-body">
+                    <h6 class="text-muted fw-bold mb-1">EVALUACIONES TOTALES</h6>
+                    <h2 class="mb-0 fw-bold" id="kpi-evaluaciones">-</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 border-start border-success border-4">
+                <div class="card-body">
+                    <h6 class="text-muted fw-bold mb-1">PROMEDIO GLOBAL</h6>
+                    <h2 class="mb-0 fw-bold" id="kpi-promedio">-</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 border-start border-info border-4">
+                <div class="card-body">
+                    <h6 class="text-muted fw-bold mb-1">ESTACIONES ACTIVAS</h6>
+                    <h2 class="mb-0 fw-bold" id="kpi-estaciones">-</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 border-start border-warning border-4">
+                <div class="card-body">
+                    <h6 class="text-muted fw-bold mb-1">ALUMNOS EVALUADOS</h6>
+                    <h2 class="mb-0 fw-bold" id="kpi-alumnos">-</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card shadow-sm border-0 mb-4 bg-light">
+        <div class="card-body d-flex gap-3 align-items-end">
+            <div style="min-width: 250px;">
+                <label class="form-label fw-bold">Filtrar por Estación:</label>
+                <select class="form-select" id="filter-estacion">
+                    <option value="">Todas las Estaciones</option>
+                    {% for est in estaciones %}
+                    <option value="{{ est.id }}">{{ est.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div style="min-width: 200px;">
+                <label class="form-label fw-bold">Filtrar por Grupo:</label>
+                <select class="form-select" id="filter-grupo">
+                    <option value="">Todos los Grupos</option>
+                    <option value="1">Grupo 1</option>
+                    <option value="2">Grupo 2</option>
+                    <option value="3">Grupo 3</option>
+                    <option value="4">Grupo 4</option>
+                </select>
+            </div>
+            <button class="btn btn-primary px-4" onclick="loadDashboardData()"><i class="bi bi-funnel-fill"></i> Aplicar
+                Filtros</button>
+        </div>
+    </div>
+
+    <!-- Gráficos -->
+    <div class="row mb-4">
+        <div class="col-md-6 mb-4">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <h5 class="card-title fw-bold">Tasa de Fallos por Estación</h5>
+                    <div style="position: relative; height:300px;">
+                        <canvas id="chartStations"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 mb-4">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <h5 class="card-title fw-bold text-danger">Top 5 Ítems Críticos (Mayor Falla)</h5>
+                    <div style="position: relative; height:300px;">
+                        <canvas id="chartTopItems"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabla Detallada -->
+    <div class="card shadow-sm border-0">
+        <div class="card-body">
+            <h5 class="card-title fw-bold mb-3">Rendimiento Detallado por Ítem</h5>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Estación / Categoría</th>
+                            <th style="width: 40%">Ítem Evaluado</th>
+                            <th class="text-center">Intentos</th>
+                            <th class="text-center">Aciertos</th>
+                            <th class="text-center">Tasa Acierto</th>
+                            <th class="text-center">Tasa Fallo</th>
+                            <th class="text-center">Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-items-body">
+                        <!-- Llenado por JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    let chartStationsInstance = null;
+    let chartTopItemsInstance = null;
+
+    document.addEventListener("DOMContentLoaded", () => {
+        loadDashboardData();
+    });
+
+    async function loadDashboardData() {
+        const estId = document.getElementById('filter-estacion').value;
+        const group = document.getElementById('filter-grupo').value;
+        const queryParams = `?estacion_id=${estId}&grupo=${group}`;
+
+        // 1. Cargar KPIs
+        try {
+            const sumRes = await fetch(`/analytics/api/summary${queryParams}`);
+            const sumData = await sumRes.json();
+            document.getElementById('kpi-evaluaciones').innerText = sumData.total_evaluaciones;
+            document.getElementById('kpi-promedio').innerText = sumData.promedio_global.toFixed(2);
+            document.getElementById('kpi-estaciones').innerText = sumData.total_estaciones;
+            document.getElementById('kpi-alumnos').innerText = sumData.total_alumnos;
+        } catch (e) { console.error("Error cargando KPIs"); }
+
+        // 2. Cargar Datos por Estación
+        try {
+            const staRes = await fetch(`/analytics/api/stations${queryParams}`);
+            const staData = await staRes.json();
+            renderStationsChart(staData);
+        } catch (e) { console.error("Error cargando Estaciones"); }
+
+        // 3. Cargar Datos por Ítem (Tabla y Chart Top 5)
+        try {
+            const itemsRes = await fetch(`/analytics/api/items${queryParams}`);
+            const itemsData = await itemsRes.json();
+            renderItemsTable(itemsData);
+            renderTopItemsChart(itemsData);
+        } catch (e) { console.error("Error cargando Ítems"); }
+    }
+
+    function exportData() {
+        const estId = document.getElementById('filter-estacion').value;
+        const group = document.getElementById('filter-grupo').value;
+        window.location.href = `/analytics/export?estacion_id=${estId}&grupo=${group}`;
+    }
+
+    function renderStationsChart(data) {
+        const ctx = document.getElementById('chartStations').getContext('2d');
+        if (chartStationsInstance) chartStationsInstance.destroy();
+
+        if (data.length === 0) return;
+
+        const labels = data.map(d => `Estación ${d.orden}`);
+        const promedios = data.map(d => d.promedio);
+
+        chartStationsInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Promedio de Puntaje',
+                    data: promedios,
+                    backgroundColor: 'rgba(54, 162, 235, 0.7)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1,
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+    }
+
+    function renderTopItemsChart(data) {
+        const ctx = document.getElementById('chartTopItems').getContext('2d');
+        if (chartTopItemsInstance) chartTopItemsInstance.destroy();
+
+        // Tomar top 5 con mayor tasa de fallo
+        const top5 = data.slice(0, 5);
+        if (top5.length === 0) return;
+
+        const labels = top5.map(d => d.texto.substring(0, 25) + '...');
+        const fallos = top5.map(d => d.fallo_rate);
+
+        chartTopItemsInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: '% Tasa de Fallo',
+                    data: fallos,
+                    backgroundColor: 'rgba(220, 53, 69, 0.7)',
+                    borderColor: 'rgba(220, 53, 69, 1)',
+                    borderWidth: 1,
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                indexAxis: 'y', // Barras Horizontales
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: { x: { beginAtZero: true, max: 100 } }
+            }
+        });
+    }
+
+    function renderItemsTable(data) {
+        const tbody = document.getElementById('table-items-body');
+        tbody.innerHTML = '';
+
+        if (data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">No hay datos de evaluaciones para mostrar.</td></tr>';
+            return;
+        }
+
+        data.forEach(item => {
+            const isCritical = item.fallo_rate > 50;
+            const row = `
+                <tr>
+                    <td>
+                        <span class="badge bg-secondary mb-1">${item.estacion}</span><br>
+                        <small class="text-muted">${item.categoria}</small>
+                    </td>
+                    <td class="fw-semibold">${item.texto}</td>
+                    <td class="text-center">${item.n_intentos}</td>
+                    <td class="text-center text-success">${item.aciertos}</td>
+                    <td class="text-center">
+                        <div class="progress" style="height: 20px;">
+                            <div class="progress-bar bg-success" role="progressbar" style="width: ${item.acierto_rate}%">${item.acierto_rate}%</div>
+                        </div>
+                    </td>
+                    <td class="text-center">
+                        <div class="progress" style="height: 20px;">
+                            <div class="progress-bar bg-danger" role="progressbar" style="width: ${item.fallo_rate}%">${item.fallo_rate}%</div>
+                        </div>
+                    </td>
+                    <td class="text-center">
+                        ${isCritical ? '<span class="badge bg-danger">Crítico</span>' : '<span class="badge bg-success">Óptimo</span>'}
+                    </td>
+                </tr>
+            `;
+            tbody.innerHTML += row;
+        });
+    }
+</script>
+{% endblock %}

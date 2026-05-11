@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="text-align:center; font-family:sans-serif; padding-top:50px;">
+    <h1 style="color:green; font-size: 50px;">&#x2714; Guardado</h1>
+    <p class="fs-4">El puntaje se envió a la PC Maestra.</p>
+
+    <a href="{{ url_for('tablet.seleccionar_alumno', estacion_id=estacion.id) }}"
+        class="btn btn-primary btn-lg mt-4 fs-3 p-4">
+        Evaluar otro alumno en esta estación
+    </a>
+
+    <br><br>
+
+    <a href="{{ url_for('tablet.seleccionar_estacion') }}" class="btn btn-outline-secondary mt-2">
+        Cambiar de Estación
+    </a>
+</div>
+{% endblock %}
