@@ -65,16 +65,12 @@
             setStatus(`Cámara RCP · MSE · activa${reloads ? ' · reconexiones ' + reloads : ''}`);
         });
 
-        // Primera carga.
+        // Primera carga únicamente. Después de esto NO hay reconexiones automáticas:
+        // con la configuración actual Tuya/go2rtc, una recarga por foco/retorno a
+        // pantalla puede cortar una señal que ya está sana y estable. Si algún día
+        // el visor queda congelado, el operador usará el botón "Reconectar cámara"
+        // de forma manual, sin afectar la grabación FFmpeg del servidor.
         reloadCamera('inicio');
-
-        // No hacemos recargas preventivas: con la configuración actual Tuya/go2rtc
-        // se ve nítido y fluido, y una recarga programada cortaría una señal sana.
-        // Si algún día el visor queda congelado, el operador puede usar el botón
-        // "Reconectar cámara" sin afectar la grabación FFmpeg del servidor.
-        document.addEventListener('visibilitychange', () => {
-            if (!document.hidden) reloadCamera('retorno a pantalla');
-        });
     </script>
 </body>
 </html>
