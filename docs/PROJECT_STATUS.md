@@ -16,6 +16,8 @@ Preparar `SistemaEvaluacion v2` para trabajo continuo con Git y futura publicaci
 
 La última prueba integrada con warm-up generó un MP4 inválido (`moov atom not found`) probablemente por cierre incompleto durante apagado/reinicio. No usar esa prueba como evidencia final.
 
+Se implementó una mejora para mitigar esto: la grabación RCP ahora escribe primero a archivo temporal, detiene FFmpeg, valida el MP4 con FFprobe/FFmpeg y solo renombra/asocia el archivo final si la validación pasa. Falta prueba integrada con cámara real.
+
 Al retomar validación funcional:
 
 1. Levantar go2rtc y Flask.

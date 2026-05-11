@@ -12,15 +12,150 @@ RECORDING_PROCESSES = {}
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 FFMPEG_BIN = os.environ.get('FFMPEG_BIN') or os.path.join(BASE_DIR, 'tools', 'ffmpeg-static', 'ffmpeg')
+FFPROBE_BIN = os.environ.get('FFPROBE_BIN') or os.path.join(BASE_DIR, 'tools', 'ffmpeg-static', 'ffprobe')
 RECORDING_STREAM_URL = os.environ.get('RECORDING_STREAM_URL', 'rtsp://127.0.0.1:8554/camara1')
 MAX_RECORDING_SECONDS = os.environ.get('MAX_RECORDING_SECONDS', '3600')
 WARMUP_SECONDS = int(os.environ.get('WARMUP_SECONDS', '5'))
+MIN_VALID_VIDEO_BYTES = int(os.environ.get('MIN_VALID_VIDEO_BYTES', '1024'))
+MIN_VALID_VIDEO_DURATION = float(os.environ.get('MIN_VALID_VIDEO_DURATION', '0.5'))
 
 def recording_file_size(path):
     try:
         return os.path.getsize(path)
     except OSError:
         return 0
+
+def append_recording_log(procs, message):
+    log_path = procs.get('log1') if procs else None
+    if not log_path:
+        return
+    try:
+        with open(log_path, 'ab') as log_file:
+            log_file.write((f"\n[TeleECOE] {message}\n").encode('utf-8', errors='replace'))
+    except Exception:
+        pass
+
+def validate_video_file(path):
+    """Valida técnicamente el MP4 antes de asociarlo a una evaluación."""
+    result = {
+        "valid": False,
+        "path": path,
+        "bytes": recording_file_size(path),
+        "duration": None,
+        "errors": []
+    }
+
+    if not os.path.exists(path):
+        result["errors"].append("file_missing")
+        return result
+    if result["bytes"] < MIN_VALID_VIDEO_BYTES:
+        result["errors"].append("file_too_small")
+
+    if not os.path.exists(FFPROBE_BIN):
+        result["errors"].append("ffprobe_not_found")
+        return result
+
+    try:
+        probe = subprocess.run(
+            [
+                FFPROBE_BIN,
+                "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                path
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=20
+        )
+        if probe.returncode != 0:
+            result["errors"].append("ffprobe_failed")
+            if probe.stderr:
+                result["ffprobe_error"] = probe.stderr.strip()[:500]
+            return result
+        duration_text = (probe.stdout or "").strip()
+        result["duration"] = float(duration_text) if duration_text else 0.0
+        if result["duration"] < MIN_VALID_VIDEO_DURATION:
+            result["errors"].append("duration_too_short")
+    except Exception as exc:
+        result["errors"].append("ffprobe_exception")
+        result["ffprobe_error"] = str(exc)[:500]
+        return result
+
+    try:
+        decode = subprocess.run(
+            [FFMPEG_BIN, "-v", "error", "-i", path, "-f", "null", "-"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=45
+        )
+        if decode.returncode != 0:
+            result["errors"].append("decode_failed")
+            if decode.stderr:
+                result["decode_error"] = decode.stderr.strip()[:500]
+    except Exception as exc:
+        result["errors"].append("decode_exception")
+        result["decode_error"] = str(exc)[:500]
+
+    result["valid"] = not result["errors"]
+    return result
+
+def stop_and_validate_recording(procs):
+    """Cierra FFmpeg, valida el MP4 temporal y solo entonces publica el archivo final."""
+    proc = procs.get('p1')
+    stopped = True
+    if proc and proc.poll() is None:
+        try:
+            proc.communicate(b'q\n', timeout=15)
+        except Exception as exc:
+            stopped = False
+            append_recording_log(procs, f"stop_timeout: {exc}")
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except Exception:
+                proc.kill()
+                try:
+                    proc.wait(timeout=5)
+                except Exception:
+                    pass
+
+    close_recording_handles(procs)
+
+    temp_path = procs.get('temp_path1')
+    final_path = procs.get('path1')
+    validation = validate_video_file(temp_path)
+    published = False
+
+    if stopped and validation.get('valid'):
+        try:
+            if os.path.exists(final_path):
+                os.remove(final_path)
+            os.replace(temp_path, final_path)
+            published = True
+            validation = validate_video_file(final_path)
+            append_recording_log(procs, f"video_validated: {validation}")
+        except Exception as exc:
+            validation["valid"] = False
+            validation.setdefault("errors", []).append("publish_failed")
+            validation["publish_error"] = str(exc)[:500]
+            append_recording_log(procs, f"publish_failed: {exc}")
+    else:
+        append_recording_log(procs, f"video_invalid: stopped={stopped} validation={validation}")
+
+    return {
+        "stopped": stopped,
+        "published": published,
+        "file": procs.get('file1'),
+        "temp_file": os.path.basename(temp_path) if temp_path else None,
+        "bytes_written": recording_file_size(final_path if published else temp_path),
+        "returncode": proc.poll() if proc else None,
+        "video_valid": bool(published and validation.get('valid')),
+        "validation": validation,
+        "log": procs.get('log1')
+    }
 
 @tablet_bp.route('/api/record/start/<estacion_id>/<alumno_id>', methods=['POST'])
 def start_record(estacion_id, alumno_id):
@@ -30,7 +165,8 @@ def start_record(estacion_id, alumno_id):
         proc = procs.get('p1')
         return jsonify({
             "status": "already_recording",
-            "bytes_written": recording_file_size(procs.get('path1')),
+            "state": procs.get('state'),
+            "bytes_written": recording_file_size(procs.get('temp_path1') or procs.get('path1')),
             "returncode": proc.poll() if proc else None
         })
         
@@ -43,6 +179,7 @@ def start_record(estacion_id, alumno_id):
     timestamp = int(time.time())
     file1 = f"A{alumno_id}_E{estacion_id}_C1_{timestamp}.mp4"
     path1 = os.path.join(recordings_dir, file1)
+    temp_path1 = os.path.join(recordings_dir, f".{file1}.part.mp4")
     log1 = os.path.join(logs_dir, f"{os.path.splitext(file1)[0]}.ffmpeg.log")
     
     if not os.path.exists(FFMPEG_BIN):
@@ -70,7 +207,8 @@ def start_record(estacion_id, alumno_id):
         "-tune", "zerolatency",
         "-pix_fmt", "yuv420p",
         "-movflags", "+faststart",
-        path1
+        "-f", "mp4",
+        temp_path1
     ]
     log_handle = open(log1, 'ab')
     p1 = subprocess.Popen(cmd1, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=log_handle)
@@ -79,14 +217,17 @@ def start_record(estacion_id, alumno_id):
         'p1': p1,
         'file1': file1,
         'path1': path1,
+        'temp_path1': temp_path1,
         'log1': log1,
         'log_handle': log_handle,
-        'started_at': time.time()
+        'started_at': time.time(),
+        'state': 'recording'
     }
     return jsonify({
         "status": "recording_started",
         "method": "ffmpeg_rtsp_transcode",
         "file": file1,
+        "temp_file": os.path.basename(temp_path1),
         "stream": "camara1"
     })
 
@@ -100,7 +241,8 @@ def record_status(estacion_id, alumno_id):
     return jsonify({
         "status": "recording" if proc and proc.poll() is None else "process_finished",
         "file": procs.get('file1'),
-        "bytes_written": recording_file_size(procs.get('path1')),
+        "state": procs.get('state'),
+        "bytes_written": recording_file_size(procs.get('temp_path1') or procs.get('path1')),
         "elapsed_seconds": round(time.time() - procs.get('started_at', time.time()), 1),
         "returncode": proc.poll() if proc else None,
         "started_at": procs.get('started_at')
@@ -120,25 +262,12 @@ def stop_record(estacion_id, alumno_id):
     procs = RECORDING_PROCESSES.get(key)
     if not procs:
         return jsonify({"status": "not_recording"})
-    proc = procs.get('p1')
-    stopped = True
-    if proc and proc.poll() is None:
-        try:
-            proc.communicate(b'q\n', timeout=10)
-        except Exception:
-            stopped = False
-            proc.terminate()
-            try:
-                proc.wait(timeout=5)
-            except Exception:
-                proc.kill()
-    close_recording_handles(procs)
+    procs['state'] = 'stopping'
+    result = stop_and_validate_recording(procs)
     del RECORDING_PROCESSES[key]
     return jsonify({
-        "status": "recording_stopped" if stopped else "stop_timeout",
-        "file": procs.get('file1'),
-        "bytes_written": recording_file_size(procs.get('path1')),
-        "returncode": proc.poll() if proc else None
+        "status": "recording_stopped" if result["video_valid"] else "video_invalid",
+        **result
     })
 
 @tablet_bp.route('/')
@@ -179,16 +308,16 @@ def evaluar(estacion_id, alumno_id):
         key = f"{estacion_id}_{alumno_id}"
         if key in RECORDING_PROCESSES:
             procs = RECORDING_PROCESSES[key]
-            proc = procs.get('p1')
-            if proc and proc.poll() is None:
-                try:
-                    proc.communicate(b'q\n', timeout=10)
-                except Exception:
-                    proc.terminate()
-            
-            evaluacion.video_camara1 = f"grabaciones/{procs['file1']}"
+            procs['state'] = 'stopping'
+            recording_result = stop_and_validate_recording(procs)
+
+            if recording_result.get('video_valid'):
+                evaluacion.video_camara1 = f"grabaciones/{procs['file1']}"
+                flash('Video RCP validado y asociado correctamente.', 'success')
+            else:
+                evaluacion.video_camara1 = None
+                flash('La evaluación se guardó, pero el video RCP no fue validado y no se asociará como evidencia.', 'warning')
             evaluacion.video_camara2 = None
-            close_recording_handles(procs)
             del RECORDING_PROCESSES[key]
             
         puntaje_total = 0.0

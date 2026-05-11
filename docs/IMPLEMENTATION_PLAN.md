@@ -61,4 +61,32 @@ Estado:
 
 ## Cambios en curso
 
-_No hay cambios en curso._
+## Cambio: Robustecer video RCP con temporal y validación
+
+Origen:
+- `docs/CAMBIOS_SOLICITADOS.md`, Fase 1, cambios 1, 2 y 3.
+
+Resumen:
+- Evitar que un MP4 incompleto o corrupto quede asociado como evidencia válida de RCP.
+
+Archivos afectados:
+- `app/routes/tablet.py`
+- `.env.example`
+- `docs/PROJECT_STATUS.md`
+
+Criterios de aceptación técnicos:
+- [x] La grabación escribe primero a archivo temporal.
+- [x] El archivo final solo se publica con `os.replace` si pasa validación.
+- [x] La validación revisa existencia, tamaño, duración con FFprobe y decodificación con FFmpeg.
+- [x] Si falla la validación, la evaluación puede guardarse pero no queda asociada a evidencia falsa.
+- [ ] Falta prueba integrada con cámara real/go2rtc.
+
+Plan:
+1. Crear archivo temporal para FFmpeg.
+2. Centralizar cierre de FFmpeg.
+3. Validar video antes de asociarlo.
+4. Reportar estado en endpoint `/stop`.
+5. Probar sintaxis y luego prueba funcional cuando cámara esté disponible.
+
+Estado:
+- En implementación / pendiente de prueba integrada.
