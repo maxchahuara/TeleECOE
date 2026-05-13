@@ -4,9 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cámara RCP</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
     <style>
         html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
-        iframe { width: 100%; height: 100%; border: 0; background: #000; }
+        iframe, video { width: 100%; height: 100%; border: 0; background: #000; object-fit: contain; }
+        .hidden { display: none; }
         .status {
             position: fixed;
             left: 10px;
@@ -21,16 +23,20 @@
         }
         .controls {
             position: fixed;
-            right: 10px;
-            bottom: 8px;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
             z-index: 6;
             display: flex;
             gap: 6px;
             align-items: center;
+            justify-content: center;
             background: rgba(0,0,0,.55);
             border: 1px solid rgba(255,255,255,.25);
             border-radius: 8px;
             padding: 5px;
+            flex-wrap: wrap;
+            max-width: min(760px, calc(100vw - 20px));
         }
         .controls button {
             color: rgba(255,255,255,.92);
@@ -42,63 +48,185 @@
             cursor: pointer;
         }
         .controls button.active { background: rgba(13,110,253,.9); border-color: rgba(255,255,255,.45); }
+        .controls button:disabled { opacity: .45; cursor: not-allowed; }
     </style>
 </head>
 <body>
-    <iframe id="cam" allow="fullscreen; autoplay; camera; microphone"></iframe>
+    <iframe id="camFrame" allow="fullscreen; autoplay; camera; microphone"></iframe>
+    <video id="camVideo" class="hidden" autoplay muted playsinline controls></video>
     <div class="status" id="status">Cámara RCP · preparando visor</div>
     <div class="controls" aria-label="Controles de cámara RCP">
+        <button type="button" data-quality="hd" onclick="setQuality('hd')">HD</button>
+        <button type="button" data-quality="sd" onclick="setQuality('sd')">SD</button>
+        <button type="button" data-mode="hls" onclick="setMode('hls')">HLS</button>
+        <button type="button" data-mode="webrtc" onclick="setMode('webrtc')">WebRTC</button>
         <button type="button" data-mode="auto" onclick="setMode('auto')">Auto</button>
         <button type="button" data-mode="mse" onclick="setMode('mse')">MSE</button>
-        <button type="button" data-mode="webrtc" onclick="setMode('webrtc')">WebRTC</button>
         <button type="button" onclick="reloadCamera('manual')">Reconectar</button>
     </div>
 
     <script>
         const host = window.location.hostname;
-        const iframe = document.getElementById('cam');
+        const iframe = document.getElementById('camFrame');
+        const video = document.getElementById('camVideo');
         const statusEl = document.getElementById('status');
         const modeButtons = Array.from(document.querySelectorAll('[data-mode]'));
+        const qualityButtons = Array.from(document.querySelectorAll('[data-quality]'));
         const STORAGE_KEY = 'teleecoe.rcp.camera.mode';
+        const QUALITY_STORAGE_KEY = 'teleecoe.rcp.camera.quality';
+        const DEFAULT_MODE = {{ camera_default_mode|tojson }};
+        const TUYA_CLOUD_HLS_CONFIGURED = {{ camera_hls_configured|tojson }};
+        const HLS_ENDPOINT = {{ url_for('tablet.camera_hls_url')|tojson }};
         let reloads = 0;
         let lastReload = 0;
-        let currentMode = localStorage.getItem(STORAGE_KEY) || 'webrtc';
+        let currentMode = localStorage.getItem(STORAGE_KEY) || DEFAULT_MODE || 'webrtc';
+        let currentQuality = localStorage.getItem(QUALITY_STORAGE_KEY) || 'hd';
+        let hlsPlayer = null;
 
         const modeLabels = {
+            hls: TUYA_CLOUD_HLS_CONFIGURED ? 'HLS oficial Tuya' : 'HLS local go2rtc',
             auto: 'Auto go2rtc',
             mse: 'MSE',
             webrtc: 'WebRTC'
         };
+        const qualityLabels = {
+            hd: 'HD',
+            sd: 'SD'
+        };
+
+        function streamName() {
+            return currentQuality === 'sd' ? 'camara1_sd' : 'camara1';
+        }
 
         function setStatus(text) {
             statusEl.textContent = text;
         }
 
-        function urlForMode(mode, cacheBust) {
-            const stamp = cacheBust || Date.now();
-            if (mode === 'mse') {
-                return `http://${host}:1984/stream.html?src=camara1&mode=mse&_=${stamp}`;
+        function stopHls() {
+            if (hlsPlayer) {
+                hlsPlayer.destroy();
+                hlsPlayer = null;
             }
-            if (mode === 'webrtc') {
-                return `http://${host}:1984/webrtc.html?src=camara1&_=${stamp}`;
-            }
-            // Modo Auto deja que go2rtc elija el reproductor disponible. Se mantiene
-            // como alternativa de diagnóstico, pero el modo predeterminado operativo
-            // para esta cámara Tuya queda en WebRTC porque fue el más estable.
-            return `http://${host}:1984/stream.html?src=camara1&_=${stamp}`;
+            video.pause();
+            video.removeAttribute('src');
+            video.load();
         }
 
-        function updateModeButtons() {
+        function showFrame() {
+            stopHls();
+            video.classList.add('hidden');
+            iframe.classList.remove('hidden');
+        }
+
+        function showVideo() {
+            iframe.removeAttribute('src');
+            iframe.classList.add('hidden');
+            video.classList.remove('hidden');
+        }
+
+        function urlForGo2rtcMode(mode, cacheBust) {
+            const stamp = cacheBust || Date.now();
+            if (mode === 'mse') {
+                return `http://${host}:1984/stream.html?src=${streamName()}&mode=mse&_=${stamp}`;
+            }
+            if (mode === 'webrtc') {
+                return `http://${host}:1984/webrtc.html?src=${streamName()}&_=${stamp}`;
+            }
+            return `http://${host}:1984/stream.html?src=${streamName()}&_=${stamp}`;
+        }
+
+        function updateButtons() {
             modeButtons.forEach((btn) => {
                 btn.classList.toggle('active', btn.dataset.mode === currentMode);
+                if (btn.dataset.mode === 'hls') {
+                    btn.disabled = false;
+                    btn.title = TUYA_CLOUD_HLS_CONFIGURED ? 'Usar HLS oficial Tuya' : 'Usar HLS local generado por go2rtc';
+                }
+            });
+            qualityButtons.forEach((btn) => {
+                btn.classList.toggle('active', btn.dataset.quality === currentQuality);
             });
         }
 
         function setMode(mode) {
             currentMode = mode;
             localStorage.setItem(STORAGE_KEY, mode);
-            updateModeButtons();
+            updateButtons();
             reloadCamera(`modo ${modeLabels[mode] || mode}`);
+        }
+
+        function setQuality(quality) {
+            currentQuality = quality === 'sd' ? 'sd' : 'hd';
+            localStorage.setItem(QUALITY_STORAGE_KEY, currentQuality);
+            updateButtons();
+            reloadCamera(`calidad ${qualityLabels[currentQuality]}`);
+        }
+
+        async function resolveHlsUrl(stamp) {
+            if (!TUYA_CLOUD_HLS_CONFIGURED) {
+                return {
+                    url: `http://${host}:1984/api/stream.m3u8?src=${streamName()}&mp4&_=${stamp}`,
+                    label: 'HLS local go2rtc'
+                };
+            }
+
+            const response = await fetch(`${HLS_ENDPOINT}?_=${stamp}`, { cache: 'no-store' });
+            const payload = await response.json();
+            if (!response.ok || payload.status !== 'ok' || !payload.url) {
+                throw new Error(payload.error || payload.status || 'hls_url_unavailable');
+            }
+            return { url: payload.url, label: 'HLS oficial Tuya' };
+        }
+
+        async function loadHls(reason, stamp) {
+            showVideo();
+            setStatus(`Cámara RCP · ${modeLabels.hls} · ${qualityLabels[currentQuality]} · preparando (${reason})`);
+
+            let hlsSource;
+            try {
+                hlsSource = await resolveHlsUrl(stamp);
+            } catch (err) {
+                setStatus(`Cámara RCP · HLS falló (${err.message}) · fallback WebRTC`);
+                loadGo2rtc('webrtc', 'fallback HLS', stamp);
+                return;
+            }
+
+            stopHls();
+            showVideo();
+
+            if (window.Hls && Hls.isSupported()) {
+                hlsPlayer = new Hls({
+                    lowLatencyMode: true,
+                    liveSyncDurationCount: 2,
+                    liveMaxLatencyDurationCount: 5,
+                    enableWorker: true
+                });
+                hlsPlayer.on(Hls.Events.ERROR, function (_event, data) {
+                    if (data && data.fatal) {
+                        setStatus(`Cámara RCP · HLS error fatal · fallback WebRTC`);
+                        loadGo2rtc('webrtc', 'fallback HLS error', Date.now());
+                    }
+                });
+                hlsPlayer.loadSource(hlsSource.url);
+                hlsPlayer.attachMedia(video);
+                hlsPlayer.on(Hls.Events.MANIFEST_PARSED, function () {
+                    video.play().catch(() => {});
+                    setStatus(`Cámara RCP · ${hlsSource.label} · ${qualityLabels[currentQuality]} · conectado · conexiones ${reloads}`);
+                });
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = hlsSource.url;
+                video.play().catch(() => {});
+                setStatus(`Cámara RCP · HLS nativo · ${qualityLabels[currentQuality]} · conectado · conexiones ${reloads}`);
+            } else {
+                setStatus('Cámara RCP · este navegador no soporta HLS · fallback WebRTC');
+                loadGo2rtc('webrtc', 'fallback navegador sin HLS', stamp);
+            }
+        }
+
+        function loadGo2rtc(mode, reason, stamp) {
+            showFrame();
+            iframe.src = urlForGo2rtcMode(mode, stamp);
+            setStatus(`Cámara RCP · ${modeLabels[mode]} · ${qualityLabels[currentQuality]} · conexión ${reloads} (${reason})`);
         }
 
         function reloadCamera(reason) {
@@ -106,18 +234,31 @@
             if (now - lastReload < 1200) return;
             lastReload = now;
             reloads += 1;
-            iframe.src = urlForMode(currentMode, now);
-            setStatus(`Cámara RCP · ${modeLabels[currentMode]} · conexión ${reloads} (${reason})`);
+
+            if (currentMode === 'hls') {
+                loadHls(reason, now);
+                return;
+            }
+            loadGo2rtc(currentMode, reason, now);
         }
 
         iframe.addEventListener('load', () => {
-            setStatus(`Cámara RCP · ${modeLabels[currentMode]} · iframe cargado${reloads ? ' · conexiones ' + reloads : ''}`);
+            if (!iframe.classList.contains('hidden')) {
+                setStatus(`Cámara RCP · ${modeLabels[currentMode]} · ${qualityLabels[currentQuality]} · iframe cargado${reloads ? ' · conexiones ' + reloads : ''}`);
+            }
         });
 
-        // Primera carga únicamente. No hay reconexiones automáticas por foco,
-        // visibilidad ni temporizador: las pruebas deben ser controladas. Para iterar
-        // sin tocar código, cambiar Auto/MSE/WebRTC y usar “Reconectar”.
-        updateModeButtons();
+        video.addEventListener('playing', () => {
+            if (!video.classList.contains('hidden')) {
+                setStatus(`Cámara RCP · ${modeLabels[currentMode]} · ${qualityLabels[currentQuality]} · reproduciendo${reloads ? ' · conexiones ' + reloads : ''}`);
+            }
+        });
+
+        // HD/SD son calidades reales solicitadas a Tuya/go2rtc; no son reescalado local.
+        // HLS usa Tuya Cloud si está configurado; si no, usa HLS local de go2rtc.
+        // Si falla, cae a WebRTC. No hay reconexiones automáticas por foco/visibilidad.
+        if (currentQuality !== 'sd') currentQuality = 'hd';
+        updateButtons();
         reloadCamera('inicio');
     </script>
 </body>
