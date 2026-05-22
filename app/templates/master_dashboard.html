@@ -1,11 +1,17 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="alert alert-info shadow-sm border-info">
-    <div class="d-flex align-items-center">
-        <div class="fs-1 me-3">📡</div>
-        <div>
-            <h4 class="alert-heading mb-1">Conexión para Tablets</h4>
-            <p class="mb-0 fs-5">http://{{ ip }}:5000/tablet</p>
+    <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+        <div class="d-flex align-items-center">
+            <div class="fs-1 me-3">📡</div>
+            <div>
+                <h4 class="alert-heading mb-1">Conexión para Tablets</h4>
+                <a class="mb-0 fs-5 text-decoration-none" href="{{ tablet_url }}">{{ tablet_url }}</a>
+            </div>
+        </div>
+        <div class="d-flex align-items-center gap-3 bg-white border rounded p-2 shadow-sm">
+            <img src="{{ url_for('master.tablet_qr') }}" width="116" height="116" alt="QR para abrir tablets">
+            <div class="small text-muted d-none d-sm-block">Scanear<br>con tablets</div>
         </div>
     </div>
 </div>
@@ -33,7 +39,7 @@
         <a href="{{ url_for('master.estaciones_admin') }}" class="btn btn-dark fs-5 me-2">🏥 Estaciones</a>
 
         <!-- Botón Nuevo de Exportación -->
-        <a href="{{ url_for('master.exportar_csv') }}" class="btn btn-success fs-5 me-2">📊 Descargar Excel/CSV</a>
+        <a href="{{ url_for('master.exportar_csv') }}" class="btn btn-success fs-5 me-2">📊 Descargar Panel Excel</a>
 
         <!-- Botón para Ver Dashboard Analítico -->
         <a href="{{ url_for('analytics.dashboard_view') }}" class="btn btn-info fs-5 me-2 text-white">📈 Ver Dashboard

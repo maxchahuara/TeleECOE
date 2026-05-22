@@ -31,9 +31,26 @@ RCP_CAMERA_HLS_URL = os.environ.get('RCP_CAMERA_HLS_URL', '').strip()
 RCP_CAMERA_HLS_URL_COMMAND = os.environ.get('RCP_CAMERA_HLS_URL_COMMAND', '').strip()
 RCP_CAMERA_HLS_URL_TIMEOUT = int(os.environ.get('RCP_CAMERA_HLS_URL_TIMEOUT', '15'))
 RCP_CAMERA_DEFAULT_MODE = os.environ.get('RCP_CAMERA_DEFAULT_MODE', '').strip().lower()
+RCP_CAMERA_ENABLED = os.environ.get('RCP_CAMERA_ENABLED', 'false').lower() in ('1', 'true', 'yes', 'on')
+RCP_CAMERA_STATION_ID = os.environ.get('RCP_CAMERA_STATION_ID', 'rcp').strip() or 'rcp'
 
 def get_active_exam():
     return Examen.query.filter_by(estado='activo').order_by(Examen.id.desc()).first()
+
+def build_student_groups(alumnos):
+    grupos = []
+    current_group = None
+    current_alumnos = []
+    for alumno in alumnos:
+        if current_group != alumno.grupo:
+            if current_alumnos:
+                grupos.append({'numero': current_group, 'alumnos': current_alumnos})
+            current_group = alumno.grupo
+            current_alumnos = []
+        current_alumnos.append(alumno)
+    if current_alumnos:
+        grupos.append({'numero': current_group, 'alumnos': current_alumnos})
+    return grupos
 
 def hls_configured():
     return bool(RCP_CAMERA_HLS_URL or RCP_CAMERA_HLS_URL_COMMAND)
@@ -42,6 +59,9 @@ def camera_default_mode():
     if RCP_CAMERA_DEFAULT_MODE in {'hls', 'webrtc', 'mse', 'auto'}:
         return RCP_CAMERA_DEFAULT_MODE
     return 'hls' if hls_configured() else 'webrtc'
+
+def station_uses_camera(estacion):
+    return bool(RCP_CAMERA_ENABLED and estacion and estacion.id == RCP_CAMERA_STATION_ID)
 
 def load_hls_url():
     """Devuelve una URL HLS temporal sin guardar ni registrar credenciales."""
@@ -218,6 +238,11 @@ def stop_and_validate_recording(procs):
 
 @tablet_bp.route('/api/record/start/<estacion_id>/<alumno_id>', methods=['POST'])
 def start_record(estacion_id, alumno_id):
+    estacion = Estacion.query.get(estacion_id)
+    if not estacion or not estacion.esta_activa:
+        return jsonify({"status": "error", "error": "estacion_inactiva"}), 403
+    if not station_uses_camera(estacion):
+        return jsonify({"status": "disabled", "error": "camera_disabled_for_station"}), 404
     key = f"{estacion_id}_{alumno_id}"
     if key in RECORDING_PROCESSES:
         procs = RECORDING_PROCESSES[key]
@@ -335,11 +360,13 @@ def stop_record(estacion_id, alumno_id):
 
 @tablet_bp.route('/')
 def seleccionar_estacion():
-    estaciones = Estacion.query.order_by(Estacion.orden).all()
+    estaciones = Estacion.query.filter_by(activa=True).order_by(Estacion.orden).all()
     return render_template('tablet_index.html', estaciones=estaciones)
 
 @tablet_bp.route('/api/camera/hls-url')
 def camera_hls_url():
+    if not RCP_CAMERA_ENABLED:
+        return jsonify({"status": "disabled"}), 404
     try:
         hls_url, source = load_hls_url()
     except Exception as exc:
@@ -354,6 +381,8 @@ def camera_hls_url():
 
 @tablet_bp.route('/camera/auto-reload')
 def camera_auto_reload():
+    if not RCP_CAMERA_ENABLED:
+        return ('', 404)
     return render_template(
         'camera_auto_reload.html',
         camera_default_mode=camera_default_mode(),
@@ -363,6 +392,9 @@ def camera_auto_reload():
 @tablet_bp.route('/<estacion_id>/seleccionar')
 def seleccionar_alumno(estacion_id):
     estacion = Estacion.query.get_or_404(estacion_id)
+    if not estacion.esta_activa:
+        flash('Esta estación está inactiva y no está disponible para evaluación.', 'warning')
+        return redirect(url_for('tablet.seleccionar_estacion'))
     examen_activo = get_active_exam()
     if not examen_activo:
         flash('No hay examen activo. Crea o activa un examen desde la PC maestra.', 'warning')
@@ -380,11 +412,22 @@ def seleccionar_alumno(estacion_id):
             e.alumno_id: True
             for e in Evaluacion.query.filter_by(estacion_id=estacion_id, examen_id=examen_activo.id).all()
         }
-    return render_template('tablet_seleccionar.html', estacion=estacion, alumnos=alumnos, evaluados_ids=evaluados_ids, examen_activo=examen_activo)
+    grupos_alumnos = build_student_groups(alumnos)
+    return render_template(
+        'tablet_seleccionar.html',
+        estacion=estacion,
+        alumnos=alumnos,
+        grupos_alumnos=grupos_alumnos,
+        evaluados_ids=evaluados_ids,
+        examen_activo=examen_activo
+    )
 
 @tablet_bp.route('/<estacion_id>/evaluar/<alumno_id>', methods=['GET', 'POST'])
 def evaluar(estacion_id, alumno_id):
     estacion = Estacion.query.get_or_404(estacion_id)
+    if not estacion.esta_activa:
+        flash('Esta estación está inactiva y no está disponible para evaluación.', 'warning')
+        return redirect(url_for('tablet.seleccionar_estacion'))
     alumno = Alumno.query.get_or_404(alumno_id)
     examen_activo = get_active_exam()
     if not examen_activo:
@@ -453,7 +496,7 @@ def evaluar(estacion_id, alumno_id):
         evaluacion.fecha_evaluacion = evaluacion.fecha_evaluacion or datetime.utcnow()
         evaluacion.updated_at = datetime.utcnow()
 
-        pendientes = set(est.id for est in Estacion.query.all())
+        pendientes = set(est.id for est in Estacion.query.filter_by(activa=True).all())
         hechas = set(e.estacion_id for e in Evaluacion.query.filter_by(alumno_id=alumno.id, examen_id=examen_activo.id).all())
         inscripcion = ExamenAlumno.query.filter_by(examen_id=examen_activo.id, alumno_id=alumno.id).first()
         if inscripcion:
@@ -471,7 +514,16 @@ def evaluar(estacion_id, alumno_id):
     video_c1 = evaluacion.video_camara1 if evaluacion else None
     video_c2 = evaluacion.video_camara2 if evaluacion else None
             
-    return render_template('tablet_evaluar.html', estacion=estacion, alumno=alumno, valores_previos=valores_previos, parse_opciones=parse_opciones, video_c1=video_c1, video_c2=video_c2)
+    return render_template(
+        'tablet_evaluar.html',
+        estacion=estacion,
+        alumno=alumno,
+        valores_previos=valores_previos,
+        parse_opciones=parse_opciones,
+        video_c1=video_c1,
+        video_c2=video_c2,
+        camera_enabled=station_uses_camera(estacion)
+    )
 
 @tablet_bp.route('/<estacion_id>/reset/<alumno_id>', methods=['POST'])
 def reset_evaluacion(estacion_id, alumno_id):

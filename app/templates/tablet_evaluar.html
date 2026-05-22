@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-{% if estacion.id == 'rcp' %}
+{% if camera_enabled %}
 <style>
     /* Full screen layout for Station 5 */
     body { height: 100vh; overflow: hidden; margin: 0; background-color: #000; }
@@ -157,7 +157,7 @@
     </div>
 </form>
 
-{% if estacion.id == 'rcp' %}
+{% if camera_enabled %}
 </div> <!-- end rcp-questions -->
 
 <script>

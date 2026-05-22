@@ -7,7 +7,7 @@
         <div>
             <a href="{{ url_for('master.dashboard') }}" class="btn btn-outline-secondary me-2">Volver al Panel</a>
             <button class="btn btn-outline-success" onclick="exportData()">
-                <i class="bi bi-file-earmark-spreadsheet"></i> Exportar CSV
+                <i class="bi bi-file-earmark-spreadsheet"></i> Exportar Dashboard Excel
             </button>
         </div>
     </div>
@@ -64,10 +64,9 @@
                 <label class="form-label fw-bold">Filtrar por Grupo:</label>
                 <select class="form-select" id="filter-grupo">
                     <option value="">Todos los Grupos</option>
-                    <option value="1">Grupo 1</option>
-                    <option value="2">Grupo 2</option>
-                    <option value="3">Grupo 3</option>
-                    <option value="4">Grupo 4</option>
+                    {% for grupo in grupos %}
+                    <option value="{{ grupo }}">Grupo {{ grupo }}</option>
+                    {% endfor %}
                 </select>
             </div>
             <button class="btn btn-primary px-4" onclick="loadDashboardData()"><i class="bi bi-funnel-fill"></i> Aplicar

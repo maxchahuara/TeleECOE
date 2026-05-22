@@ -35,6 +35,12 @@
                         <input type="number" class="form-control" name="orden"
                             value="{{ estacion_edit.orden if estacion_edit else '11' }}" required>
                     </div>
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" role="switch" id="activa" name="activa" value="1"
+                            {% if not estacion_edit or estacion_edit.esta_activa %}checked{% endif %}>
+                        <label class="form-check-label" for="activa">Estación activa</label>
+                        <div class="form-text">Las estaciones inactivas conservan su rúbrica e histórico, pero no aparecen en tablets.</div>
+                    </div>
                     <div class="d-grid mt-4">
                         <button type="submit" class="btn btn-{% if estacion_edit %}warning{% else %}primary{% endif %}">
                             {% if estacion_edit %}Guardar Cambios{% else %}Agregar Estación{% endif %}
@@ -59,6 +65,7 @@
                             <th>ID (URL)</th>
                             <th>Nombre Completo</th>
                             <th>Orden</th>
+                            <th>Estado</th>
                             <th class="text-center">Acciones</th>
                         </tr>
                     </thead>
@@ -68,6 +75,13 @@
                             <td><code>{{ e.id }}</code></td>
                             <td class="fw-bold">{{ e.nombre }}</td>
                             <td>{{ e.orden }}</td>
+                            <td>
+                                {% if e.esta_activa %}
+                                <span class="badge bg-success">Activa</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Inactiva</span>
+                                {% endif %}
+                            </td>
                             <td class="text-center">
                                 <!-- Botón vital para adentrarse en la rúbrica (preguntas) de esta estación -->
                                 <a href="{{ url_for('master.estaciones_constructor', id=e.id) }}"
@@ -75,6 +89,15 @@
 
                                 <a href="{{ url_for('master.estaciones_editar', id=e.id) }}"
                                     class="btn btn-sm btn-warning">Editar</a>
+
+                                <form method="POST" action="{{ url_for('master.estaciones_toggle', id=e.id) }}"
+                                    class="d-inline">
+                                    {% if e.esta_activa %}
+                                    <button type="submit" class="btn btn-sm btn-outline-secondary">Desactivar</button>
+                                    {% else %}
+                                    <button type="submit" class="btn btn-sm btn-outline-success">Activar</button>
+                                    {% endif %}
+                                </form>
 
                                 <form method="POST" action="{{ url_for('master.estaciones_eliminar', id=e.id) }}"
                                     class="d-inline"
@@ -85,7 +108,7 @@
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="4" class="text-center text-muted">No hay estaciones registradas.</td>
+                            <td colspan="5" class="text-center text-muted">No hay estaciones registradas.</td>
                         </tr>
                         {% endfor %}
                     </tbody>

@@ -48,9 +48,14 @@ class Estacion(db.Model):
     id = db.Column(db.String(50), primary_key=True)
     nombre = db.Column(db.String(100), nullable=False)
     orden = db.Column(db.Integer, nullable=False)
+    activa = db.Column(db.Boolean, nullable=False, default=True)
 
     categorias = db.relationship('Categoria', backref='estacion', lazy=True)
     evaluaciones = db.relationship('Evaluacion', backref='estacion', lazy=True)
+
+    @property
+    def esta_activa(self):
+        return self.activa is not False
 
 class Categoria(db.Model):
     __tablename__ = 'categoria'

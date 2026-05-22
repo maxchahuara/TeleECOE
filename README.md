@@ -2,6 +2,8 @@
 
 TeleECOE es un sistema web local para evaluación clínica por estaciones tipo ECOE/OSCE. Está pensado para una **PC maestra** y tablets o laptops conectadas en la misma red.
 
+Versión actual: **1.1.0**. Historial y rollback: [`docs/VERSIONES.md`](docs/VERSIONES.md).
+
 Incluye:
 
 - administración de alumnos;
@@ -189,6 +191,7 @@ release_check_ok=true
 ## Documentación útil
 
 - [`docs/INSTALLATION.md`](docs/INSTALLATION.md) — instalación Windows/Linux/macOS.
+- [`docs/VERSIONES.md`](docs/VERSIONES.md) — versiones publicadas y cómo volver a una versión estable anterior.
 - [`docs/TELEECOE_GUIA_COMPLETA.md`](docs/TELEECOE_GUIA_COMPLETA.md) — guía completa en lenguaje natural.
 - [`docs/EXAMENES_ALUMNOS_IMPORTACION_2026-05-12.md`](docs/EXAMENES_ALUMNOS_IMPORTACION_2026-05-12.md) — exámenes e importación.
 - [`docs/RCP_VIDEO_CONFIG_HD_SD_2026-05-12.md`](docs/RCP_VIDEO_CONFIG_HD_SD_2026-05-12.md) — configuración RCP/video.

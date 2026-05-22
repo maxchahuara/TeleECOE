@@ -1,14 +1,21 @@
 from flask import Blueprint, render_template, request, redirect, flash, url_for, Response
 from app.models.models import Examen, ExamenAlumno, Alumno, Estacion, Categoria, Criterio, Evaluacion, EvaluacionDetalle
 from extensions import db
+import fcntl
+import os
 import socket
+import struct
 import csv
 import io
+import re
+import unicodedata
 from datetime import datetime
 from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Font, PatternFill
 from sqlalchemy.exc import IntegrityError
 
 master_bp = Blueprint('master', __name__)
+XLSX_MIMETYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
 def get_active_exam(create_if_missing=True):
     examen = Examen.query.filter_by(estado='activo').order_by(Examen.id.desc()).first()
@@ -30,7 +37,23 @@ def enroll_student(examen, alumno, observaciones=None):
     db.session.add(item)
     return item
 
+def get_interface_ip(interface_name):
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            request_data = struct.pack('256s', interface_name[:15].encode('utf-8'))
+            return socket.inet_ntoa(fcntl.ioctl(s.fileno(), 0x8915, request_data)[20:24])
+    except OSError:
+        return None
+
 def get_local_ip():
+    configured_host = os.environ.get('TABLET_HOST')
+    if configured_host:
+        return configured_host
+
+    hotspot_ip = get_interface_ip('ap0')
+    if hotspot_ip:
+        return hotspot_ip
+
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         s.connect(('8.8.8.8', 80))
@@ -40,6 +63,40 @@ def get_local_ip():
     finally:
         s.close()
     return IP
+
+def get_tablet_url():
+    configured_url = os.environ.get('TABLET_URL')
+    if configured_url:
+        return configured_url
+
+    return f'http://{get_local_ip()}:5000/tablet/'
+
+def slugify_identifier(value):
+    value = (value or '').strip().lower()
+    value = unicodedata.normalize('NFKD', value).encode('ascii', 'ignore').decode('ascii')
+    value = re.sub(r'[^a-z0-9]+', '_', value)
+    value = re.sub(r'_+', '_', value).strip('_')
+    return value[:40]
+
+def unique_criterio_id(base_id):
+    base_id = slugify_identifier(base_id) or 'criterio'
+    candidate = base_id
+    suffix = 2
+    while Criterio.query.get(candidate):
+        suffix_text = f'_{suffix}'
+        candidate = f'{base_id[:50 - len(suffix_text)]}{suffix_text}'
+        suffix += 1
+    return candidate
+
+def style_export_sheet(ws):
+    fill = PatternFill('solid', fgColor='1F4E78')
+    for cell in ws[1]:
+        cell.font = Font(bold=True, color='FFFFFF')
+        cell.fill = fill
+    for column_cells in ws.columns:
+        width = max(len(str(cell.value or '')) for cell in column_cells)
+        ws.column_dimensions[column_cells[0].column_letter].width = min(max(width + 2, 12), 55)
+    ws.freeze_panes = 'A2'
 
 @master_bp.route('/')
 def dashboard():
@@ -51,7 +108,7 @@ def dashboard():
         .order_by(Alumno.grupo, Alumno.nombre)
         .all()
     )
-    estaciones = Estacion.query.order_by(Estacion.orden).all()
+    estaciones = Estacion.query.filter_by(activa=True).order_by(Estacion.orden).all()
     
     resultados = []
     for alu in alumnos:
@@ -75,8 +132,38 @@ def dashboard():
             'notas_estaciones': notas_estaciones
         })
         
-    ip = get_local_ip()
-    return render_template('master_dashboard.html', ip=ip, estaciones=estaciones, resultados=resultados, examen_activo=examen_activo)
+    tablet_url = get_tablet_url()
+    return render_template(
+        'master_dashboard.html',
+        ip=get_local_ip(),
+        tablet_url=tablet_url,
+        estaciones=estaciones,
+        resultados=resultados,
+        examen_activo=examen_activo
+    )
+
+@master_bp.route('/tablet-qr.svg')
+def tablet_qr():
+    import qrcode
+    from qrcode.image.svg import SvgPathImage
+
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=8,
+        border=2,
+        image_factory=SvgPathImage,
+    )
+    qr.add_data(get_tablet_url())
+    qr.make(fit=True)
+
+    output = io.BytesIO()
+    qr.make_image().save(output)
+    return Response(
+        output.getvalue(),
+        mimetype='image/svg+xml',
+        headers={'Cache-Control': 'no-store'}
+    )
 
 @master_bp.route('/examenes', methods=['GET', 'POST'])
 def examenes_admin():
@@ -376,6 +463,7 @@ def estaciones_admin():
         id_val = (request.form.get('id') or '').strip()
         nombre = (request.form.get('nombre') or '').strip()
         orden = (request.form.get('orden') or '').strip()
+        activa = request.form.get('activa') == '1'
 
         if not id_val or not nombre:
             flash('El ID y nombre de la estación son obligatorios.', 'danger')
@@ -386,7 +474,7 @@ def estaciones_admin():
             flash('El orden de la estación debe ser un número entero.', 'danger')
             return redirect(url_for('master.estaciones_admin'))
 
-        estacion = Estacion(id=id_val, nombre=nombre, orden=orden_int)
+        estacion = Estacion(id=id_val, nombre=nombre, orden=orden_int, activa=activa)
         db.session.add(estacion)
         try:
             db.session.commit()
@@ -406,6 +494,7 @@ def estaciones_editar(id):
     if request.method == 'POST':
         nombre = (request.form.get('nombre') or '').strip()
         orden = (request.form.get('orden') or '').strip()
+        activa = request.form.get('activa') == '1'
         if not nombre:
             flash('El nombre de la estación es obligatorio.', 'danger')
             return redirect(url_for('master.estaciones_editar', id=id))
@@ -417,6 +506,7 @@ def estaciones_editar(id):
 
         estacion.nombre = nombre
         estacion.orden = orden_int
+        estacion.activa = activa
         db.session.commit()
         flash('Estación actualizada.', 'success')
         return redirect(url_for('master.estaciones_admin'))
@@ -447,6 +537,15 @@ def estaciones_eliminar(id):
         return redirect(url_for('master.estaciones_admin'))
 
     flash('Estación eliminada junto con su rúbrica y evaluaciones asociadas.', 'success')
+    return redirect(url_for('master.estaciones_admin'))
+
+@master_bp.route('/estaciones/toggle/<id>', methods=['POST'])
+def estaciones_toggle(id):
+    estacion = Estacion.query.get_or_404(id)
+    estacion.activa = not estacion.esta_activa
+    db.session.commit()
+    estado = 'activada' if estacion.esta_activa else 'desactivada'
+    flash(f'Estación {estado}: {estacion.nombre}.', 'success')
     return redirect(url_for('master.estaciones_admin'))
 
 @master_bp.route('/estaciones/<id>/constructor', methods=['GET'])
@@ -483,16 +582,32 @@ def categorias_eliminar(id):
 @master_bp.route('/criterios/nuevo/<id_categoria>', methods=['POST'])
 def criterios_nuevo(id_categoria):
     categoria = Categoria.query.get_or_404(id_categoria)
-    id_val = request.form.get('id')
-    texto = request.form.get('texto')
+    texto = (request.form.get('texto') or '').strip()
+    requested_id = request.form.get('id') or texto
+    id_val = unique_criterio_id(requested_id)
     puntos = request.form.get('puntos', type=float, default=1.0)
     tipo = request.form.get('tipo', default='checkbox')
     opciones = request.form.get('opciones', default='') if tipo == 'rango' else None
+
+    if not texto:
+        flash('El texto del criterio es obligatorio.', 'danger')
+        return redirect(url_for('master.estaciones_constructor', id=categoria.estacion_id))
     
     criterio = Criterio(id=id_val, categoria_id=id_categoria, texto=texto, puntos=puntos, tipo=tipo, opciones=opciones)
     db.session.add(criterio)
-    db.session.commit()
-    flash('Criterio añadido exitosamente.', 'success')
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        id_val = unique_criterio_id(f'{categoria.estacion_id}_{texto}')
+        criterio.id = id_val
+        db.session.add(criterio)
+        db.session.commit()
+
+    if slugify_identifier(requested_id) != id_val:
+        flash(f'Criterio añadido exitosamente con ID único: {id_val}.', 'success')
+    else:
+        flash('Criterio añadido exitosamente.', 'success')
     return redirect(url_for('master.estaciones_constructor', id=categoria.estacion_id))
 
 @master_bp.route('/criterios/eliminar/<id>', methods=['POST'])
@@ -506,6 +621,52 @@ def criterios_eliminar(id):
 
 @master_bp.route('/exportar')
 def exportar_csv():
-    # Placeholder redirect or actual csv export
-    flash('Exportación iniciada.', 'info')
-    return redirect(url_for('analytics.export_csv'))
+    examen_activo = get_active_exam()
+    alumnos = (
+        Alumno.query
+        .join(ExamenAlumno)
+        .filter(ExamenAlumno.examen_id == examen_activo.id)
+        .order_by(Alumno.grupo, Alumno.nombre)
+        .all()
+    )
+    estaciones = Estacion.query.filter_by(activa=True).order_by(Estacion.orden).all()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Panel de control'
+
+    encabezados = ['ID', 'Alumno', 'Grupo']
+    for est in estaciones:
+        encabezados.extend([f'E{est.orden} {est.nombre} - Evaluado', f'E{est.orden} {est.nombre} - Puntaje'])
+    ws.append(encabezados)
+
+    for alumno in alumnos:
+        evaluaciones = {
+            e.estacion_id: e
+            for e in alumno.evaluaciones
+            if e.examen_id == examen_activo.id
+        }
+        fila = [alumno.id, alumno.nombre, alumno.grupo]
+        for est in estaciones:
+            evaluacion = evaluaciones.get(est.id)
+            fila.extend(['Si' if evaluacion else 'No', round(evaluacion.puntaje_total, 1) if evaluacion else 0.0])
+        ws.append(fila)
+
+    style_export_sheet(ws)
+
+    resumen = wb.create_sheet('Resumen')
+    resumen.append(['Campo', 'Valor'])
+    resumen.append(['Examen activo', examen_activo.nombre])
+    resumen.append(['Alumnos', len(alumnos)])
+    resumen.append(['Estaciones activas', len(estaciones)])
+    resumen.append(['Filas exportadas', len(alumnos)])
+    style_export_sheet(resumen)
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return Response(
+        output.getvalue(),
+        mimetype=XLSX_MIMETYPE,
+        headers={'Content-Disposition': 'attachment; filename=panel_control_calificaciones.xlsx'}
+    )
